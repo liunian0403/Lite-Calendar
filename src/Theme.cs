@@ -208,6 +208,14 @@ namespace QingLi
                 TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
         }
 
+        /// <summary>居中绘制小徽标文字：去掉内边距，避免「休」「班」等单个 CJK 字符在小方框内被省略号截断。</summary>
+        public static void TextCBare(Graphics g, string s, Font f, Color c, Rectangle r)
+        {
+            TextRenderer.DrawText(g, s, f, r, c,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+        }
+
         // ---------- 窗口外观 ----------
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;

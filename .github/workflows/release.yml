@@ -36,7 +36,7 @@ jobs:
           & build\TestHoliday.exe
           if ($LASTEXITCODE -ne 0) { throw "TestHoliday failed" }
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,4 +57,11 @@ jobs:
           **文件校验（SHA256）**： ``$hash``
           "@
           $notes | Out-File -Encoding utf8 notes.md
-          gh release create "$env:GITHUB_REF_NAME" $exe.FullName --title "轻历 QingLi $env:GITHUB_REF_NAME" --notes-file notes.md
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # tag 重推场景：替换资产并刷新说明，保持 Release 与 tag 指向一致
+            gh release upload "$env:GITHUB_REF_NAME" $exe.FullName --clobber
+            gh release edit "$env:GITHUB_REF_NAME" --title "轻历 QingLi $env:GITHUB_REF_NAME" --notes-file notes.md
+          } else {
+            gh release create "$env:GITHUB_REF_NAME" $exe.FullName --title "轻历 QingLi $env:GITHUB_REF_NAME" --notes-file notes.md
+          }

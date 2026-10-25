@@ -108,7 +108,15 @@ class TestHoliday
         Check(r7.Count == 1 && !r7[0].IsOffDay, "仅调休记录的节日可搜到");
         // 范围限制：from 之后两年
         List<HolidayInfo> r8 = svc5.SearchHolidays("春节", new DateTime(2028, 1, 1), 10);
-        Check(r8.Count == 0, "超出两年范围不返回");
+        Check(r8.Count == 0, "超出两年范围且一年内无记录不返回");
+        // 未来无命中时回退到最近一年内已发生的记录（如次年安排未公布）
+        List<HolidayInfo> r9 = svc5.SearchHolidays("国庆", new DateTime(2026, 10, 25), 10);
+        Check(r9.Count == 1 && r9[0].Date == new DateTime(2026, 10, 1) && r9[0].IsOffDay, "未来无命中时回退到最近过去的放假日");
+        List<HolidayInfo> r10 = svc5.SearchHolidays("national day", new DateTime(2026, 10, 25), 10);
+        Check(r10.Count == 1 && r10[0].Name == "国庆节", "回退逻辑同样支持英文别名");
+        // 未来有命中时不返回过去的记录
+        List<HolidayInfo> r11 = svc5.SearchHolidays("国庆", new DateTime(2026, 9, 1), 10);
+        Check(r11.Count == 1 && r11[0].Date == new DateTime(2026, 10, 1), "未来有命中时优先返回未来记录");
 
         Console.WriteLine();
         Console.WriteLine("结果: " + passed + " 通过, " + failed + " 失败");

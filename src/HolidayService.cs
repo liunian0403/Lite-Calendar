@@ -174,7 +174,9 @@ namespace QingLi
             return SearchHolidays(query, DateTime.Today, maxCount);
         }
 
-        /// <summary>搜索节假日（指定起始日，便于测试与复用）。</summary>
+        /// <summary>搜索节假日（指定起始日，便于测试与复用）。
+        /// 优先返回未来两年内的下一个日期；若无未来命中（如次年安排尚未公布），
+        /// 回退返回最近一年内已发生的记录，避免搜索结果为空的困惑。</summary>
         public List<HolidayInfo> SearchHolidays(string query, DateTime from, int maxCount)
         {
             List<HolidayInfo> all;
@@ -185,15 +187,21 @@ namespace QingLi
             all.Sort(delegate (HolidayInfo a, HolidayInfo b) { return a.Date.CompareTo(b.Date); });
 
             DateTime start = from.Date;
-            DateTime limit = from.Date.AddYears(2);
-            bool wildcard = IsHolidayWildcard(query);
+            List<HolidayInfo> result = SearchRange(all, query, start, start.AddYears(2), maxCount);
+            if (result.Count == 0)
+                result = SearchRange(all, query, start.AddDays(-366), start, maxCount);
+            return result;
+        }
 
-            // 同名节日：优先保留最早的放假记录，没有放假记录时保留最早出现的调休记录。
+        /// <summary>在 [start, end] 闭区间内搜索：同名节日优先保留最早的放假记录（无放假记录时保留最早调休记录）。</summary>
+        private static List<HolidayInfo> SearchRange(List<HolidayInfo> all, string query, DateTime start, DateTime end, int maxCount)
+        {
+            bool wildcard = IsHolidayWildcard(query);
             Dictionary<string, HolidayInfo> best = new Dictionary<string, HolidayInfo>(StringComparer.CurrentCulture);
             for (int i = 0; i < all.Count; i++)
             {
                 HolidayInfo hi = all[i];
-                if (hi.Date < start || hi.Date > limit) continue;
+                if (hi.Date < start || hi.Date > end) continue;
                 if (!wildcard && !NameMatches(hi, query)) continue;
 
                 HolidayInfo cur;

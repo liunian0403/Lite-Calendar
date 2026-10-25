@@ -158,7 +158,7 @@ namespace QingLi
                         Color tagFg = isHoliday ? Theme.Holiday : Theme.TextSecondary;
                         Rectangle badge = new Rectangle(circle.Right + Theme.S(3), circle.Y + Theme.S(4), Theme.S(16), Theme.S(16));
                         Theme.FillRound(g, badge, Theme.S(4), tagBg);
-                        Theme.TextC(g, tag, Theme.FSmall, tagFg, badge);
+                        Theme.TextCBare(g, tag, Theme.FSmall, tagFg, badge);
 
                         // 节日名称（空间足够时显示）
                         if (isHoliday && cell.Width > Theme.S(96))
