@@ -1,0 +1,60 @@
+name: release
+
+# 推送语义化 tag（v*）时自动构建 Windows 安装包并发布 GitHub Release（gh release create，asset 为安装包 + SHA256）。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup -y --no-progress
+
+      - name: Build (icon + csc + ISCC)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File build.ps1
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:exe /codepage:65001 /out:build\TestCore.exe tests\TestCore.cs src\Models.cs src\Ics.cs
+          if ($LASTEXITCODE -ne 0) { throw "TestCore compile failed" }
+          & build\TestCore.exe
+          if ($LASTEXITCODE -ne 0) { throw "TestCore failed" }
+          & $csc /nologo /target:exe /codepage:65001 /out:build\TestHoliday.exe tests\TestHoliday.cs src\HolidayService.cs src\HolidayData.cs src\JsonLite.cs
+          if ($LASTEXITCODE -ne 0) { throw "TestHoliday compile failed" }
+          & build\TestHoliday.exe
+          if ($LASTEXITCODE -ne 0) { throw "TestHoliday failed" }
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem dist\QingLi-Setup-*.exe | Select-Object -First 1
+          if ($exe -eq $null) { throw "installer not found in dist" }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          $notes = @"
+          ## 轻历 QingLi $env:GITHUB_REF_NAME
+
+          ### 新增
+          - **开始界面搜索**：支持英文关键词 `calendar` / `calander`（拼写变体等价），回车回到今天；节假日支持中文名与英文别名搜索（如 `national day` → 国庆节、`spring festival` → 春节），`holiday` 列出即将到来的节假日
+          - **中国法定节假日与调休自动展示**：从 holiday-cn 公开数据（jsDelivr 多数据源回退）自动拉取当年与次年安排并本地缓存，断网自动回退内置快照；月 / 周 / 日视图与迷你月历标注「休」「班」，侧栏与状态栏同步显示
+
+          ### 安装
+          下载 `QingLi-Setup-*.exe` 直接安装（免管理员权限，Windows 7 SP1+ / .NET Framework 4.6+）。
+
+          **文件校验（SHA256）**： ``$hash``
+          "@
+          $notes | Out-File -Encoding utf8 notes.md
+          gh release create "$env:GITHUB_REF_NAME" $exe.FullName --title "轻历 QingLi $env:GITHUB_REF_NAME" --notes-file notes.md
