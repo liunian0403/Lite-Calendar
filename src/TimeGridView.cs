@@ -15,6 +15,9 @@ namespace QingLi
         public int DayCount = 7;
         public DateTime SelectedDate = DateTime.Today;
 
+        /// <summary>节假日数据源（可为 null）。</summary>
+        public HolidayService Holidays;
+
         public event Action<Occurrence> EventClicked;
         public event Action<DateTime> SlotDoubleClicked;
         public event Action<DateTime, Occurrence, Point> EventRightClicked;
@@ -174,14 +177,30 @@ namespace QingLi
                 if (isSel) Theme.FillRound(g, new Rectangle(hr.X + Theme.S(2), Theme.S(4), hr.Width - Theme.S(4), hr.Height - Theme.S(8)), Theme.S(6), Theme.Surface);
 
                 string[] wd = new string[] { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
-                Color wc = isToday ? Theme.Accent : (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday ? Theme.Weekend : Theme.TextSecondary);
+                HolidayInfo hi = Holidays != null ? Holidays.GetDay(d) : null;
+                bool isHoliday = hi != null && hi.IsOffDay;
+                bool isMakeup = hi != null && !hi.IsOffDay;
+                bool weekend = d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday;
+                Color wc = isToday ? Theme.Accent
+                    : isHoliday ? Theme.Holiday
+                    : (weekend && !isMakeup) ? Theme.Weekend
+                    : Theme.TextSecondary;
                 Theme.TextC(g, wd[(int)d.DayOfWeek], Theme.FSmall, wc, new Rectangle(hr.X, Theme.S(4), hr.Width, Theme.S(18)));
 
                 int dia = Theme.S(26);
                 Rectangle circle = new Rectangle(hr.X + (colW - dia) / 2, Theme.S(22), dia, dia);
                 if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
                 Theme.TextC(g, d.Day.ToString(CultureInfo.InvariantCulture), isToday ? Theme.FBodyBold : Theme.FBody,
-                    isToday ? Color.White : Theme.TextPrimary, circle);
+                    isToday ? Color.White : (isHoliday ? Theme.Holiday : Theme.TextPrimary), circle);
+
+                // 表头右侧显示节假日 / 调休标记
+                if (hi != null && !isToday)
+                {
+                    string tag = isHoliday ? hi.Name : "班";
+                    Color tagFg = isHoliday ? Theme.Holiday : Theme.TextSecondary;
+                    Rectangle tagBox = new Rectangle(circle.Right + Theme.S(2), circle.Y, Math.Max(0, hr.Right - circle.Right - Theme.S(6)), dia);
+                    Theme.TextLeft(g, tag, Theme.FSmall, tagFg, tagBox);
+                }
             }
 
             // ---- 全天事件条 ----

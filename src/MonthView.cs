@@ -14,6 +14,9 @@ namespace QingLi
         public DateTime AnchorDate = DateTime.Today;
         public DateTime SelectedDate = DateTime.Today;
 
+        /// <summary>节假日数据源（可为 null，此时不显示节假日信息）。</summary>
+        public HolidayService Holidays;
+
         public event Action<Occurrence> EventClicked;
         public event Action<DateTime> DayDoubleClicked;
         public event Action<DateTime, Occurrence, Point> DayRightClicked;
@@ -132,11 +135,38 @@ namespace QingLi
                     // 日期数字（文字框比圆圈宽，避免两位数被省略号截断）
                     int dia = Theme.S(24);
                     Rectangle circle = new Rectangle(cell.X + Theme.S(5), cell.Y + Theme.S(4), dia, dia);
+                    HolidayInfo hi = (Holidays != null && inMonth) ? Holidays.GetDay(d) : null;
+                    bool isHoliday = hi != null && hi.IsOffDay;
+                    bool isMakeup = hi != null && !hi.IsOffDay;
                     if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
                     Color numColor = isToday ? Color.White : (inMonth ? Theme.TextPrimary : Theme.TextMuted);
-                    if (!isToday && c >= 5 && inMonth) numColor = Theme.Weekend;
+                    if (!isToday && inMonth)
+                    {
+                        // 调休上班的周末按工作日着色；普通周末用休息色；法定假日用节日色
+                        if (isMakeup) numColor = Theme.TextPrimary;
+                        else if (isHoliday) numColor = Theme.Holiday;
+                        else if (c >= 5) numColor = Theme.Weekend;
+                    }
                     Rectangle numBox = new Rectangle(circle.X + dia / 2 - Theme.S(22), circle.Y, Theme.S(44), dia);
                     Theme.TextC(g, d.Day.ToString(CultureInfo.InvariantCulture), isToday ? Theme.FBodyBold : Theme.FBody, numColor, numBox);
+
+                    // 节假日 / 调休徽标（休：节日色底；班：中性底），画在日期圆圈右侧
+                    if (inMonth && (isHoliday || isMakeup))
+                    {
+                        string tag = isHoliday ? "休" : "班";
+                        Color tagBg = isHoliday ? Theme.Mix(Theme.Surface, Theme.Holiday, 0.22f) : Theme.WorkdayBadge;
+                        Color tagFg = isHoliday ? Theme.Holiday : Theme.TextSecondary;
+                        Rectangle badge = new Rectangle(circle.Right + Theme.S(3), circle.Y + Theme.S(4), Theme.S(16), Theme.S(16));
+                        Theme.FillRound(g, badge, Theme.S(4), tagBg);
+                        Theme.TextC(g, tag, Theme.FSmall, tagFg, badge);
+
+                        // 节日名称（空间足够时显示）
+                        if (isHoliday && cell.Width > Theme.S(96))
+                        {
+                            Rectangle nameBox = new Rectangle(badge.Right + Theme.S(2), circle.Y, cell.Right - badge.Right - Theme.S(6), dia);
+                            Theme.TextLeft(g, hi.Name, Theme.FSmall, Theme.Mix(Theme.TextSecondary, Theme.Holiday, 0.5f), nameBox);
+                        }
+                    }
 
                     // 事件色块
                     List<Occurrence> items;

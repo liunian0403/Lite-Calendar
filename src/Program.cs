@@ -88,8 +88,11 @@ namespace QingLi
                 EventStore store = new EventStore();
                 store.Load();
 
+                HolidayService holidays = new HolidayService();
+                holidays.Load();
+
                 ReminderService reminders = new ReminderService(store);
-                MainForm form = new MainForm(store, reminders);
+                MainForm form = new MainForm(store, reminders, holidays);
                 reminders.Start();
                 try
                 {

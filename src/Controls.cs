@@ -192,6 +192,9 @@ namespace QingLi
         public int WeekdayHeight = 20;
         public int Rows = 6;
 
+        /// <summary>节假日数据源（可为 null）。</summary>
+        public HolidayService Holidays;
+
         public event Action<DateTime> DateClicked;
         public event Action<DateTime> MonthChanged;
 
@@ -304,8 +307,11 @@ namespace QingLi
                     if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
 
                     Color tc;
+                    HolidayInfo hi = (Holidays != null && inMonth) ? Holidays.GetDay(d) : null;
                     if (isToday) tc = Color.White;
                     else if (!inMonth) tc = Theme.TextMuted;
+                    else if (hi != null && hi.IsOffDay) tc = Theme.Holiday;
+                    else if (hi != null && !hi.IsOffDay) tc = Theme.TextPrimary; // 调休上班的周末按工作日着色
                     else if (c >= 5) tc = Theme.Weekend;
                     else tc = Theme.TextPrimary;
 

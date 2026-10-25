@@ -41,6 +41,12 @@ namespace QingLi
         public static readonly Color Weekend = ColorTranslator.FromHtml("#8E8E9A");
         public static readonly Color NowLine = ColorTranslator.FromHtml("#FF7A7A");
 
+        /// <summary>节假日（休）强调色，用于法定放假日期。</summary>
+        public static readonly Color Holiday = ColorTranslator.FromHtml("#FF8C9B");
+
+        /// <summary>调休上班（班）徽标底色。</summary>
+        public static readonly Color WorkdayBadge = ColorTranslator.FromHtml("#33333B");
+
         public static readonly Color[] EventColors = new Color[]
         {
             ColorTranslator.FromHtml("#4CC2FF"),

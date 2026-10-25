@@ -119,14 +119,31 @@ namespace QingLi
         }
     }
 
+    /// <summary>搜索结果条目：日程 / 节假日 / calendar 命令三类。</summary>
+    public class SearchHit
+    {
+        public string Title = "";
+        public string Subtitle = "";
+        public int ColorIndex = 0;
+
+        /// <summary>日程命中（其余两类为 null）。</summary>
+        public EventItem Event;
+
+        /// <summary>节假日命中时的跳转日期。</summary>
+        public DateTime JumpDate;
+
+        public bool IsHoliday;
+        public bool IsCalendarCommand;
+    }
+
     /// <summary>搜索下拉结果列表。</summary>
     public class SearchList : Control
     {
-        private readonly List<EventItem> _items = new List<EventItem>();
+        private readonly List<SearchHit> _items = new List<SearchHit>();
         private int _selected;
         private int _hover = -1;
 
-        public event Action<EventItem> Activated;
+        public event Action<SearchHit> Activated;
 
         public SearchList()
         {
@@ -150,7 +167,7 @@ namespace QingLi
             }
         }
 
-        public void SetItems(List<EventItem> items)
+        public void SetItems(List<SearchHit> items)
         {
             _items.Clear();
             if (items != null) _items.AddRange(items);
@@ -158,7 +175,7 @@ namespace QingLi
             Invalidate();
         }
 
-        public EventItem Current
+        public SearchHit Current
         {
             get { return _items.Count == 0 ? null : _items[_selected]; }
         }
@@ -172,7 +189,7 @@ namespace QingLi
             g.Clear(Theme.Surface);
             if (_items.Count == 0)
             {
-                Theme.TextC(g, "没有匹配的日程", Theme.FSmall, Theme.TextMuted, new Rectangle(0, 0, Width, Height));
+                Theme.TextC(g, "没有匹配的日程或节假日", Theme.FSmall, Theme.TextMuted, new Rectangle(0, 0, Width, Height));
                 return;
             }
             for (int i = 0; i < _items.Count; i++)
@@ -181,14 +198,13 @@ namespace QingLi
                 if (i == _selected) Theme.FillRound(g, row, Theme.S(5), Theme.AccentSoft);
                 else if (i == _hover) Theme.FillRound(g, row, Theme.S(5), Theme.SurfaceHi);
 
-                EventItem it = _items[i];
-                Color color = Theme.EventColor(it.ColorIndex);
+                SearchHit it = _items[i];
+                Color color = it.IsHoliday ? Theme.Holiday
+                    : it.IsCalendarCommand ? Theme.Accent
+                    : Theme.EventColor(it.ColorIndex);
                 Theme.FillRound(g, new Rectangle(row.X + Theme.S(6), row.Y + Theme.S(8), Theme.S(3), row.Height - Theme.S(16)), Theme.S(2), color);
                 Theme.TextLeft(g, it.Title, Theme.FBody, Theme.TextPrimary, new Rectangle(row.X + Theme.S(16), row.Y + Theme.S(3), row.Width - Theme.S(22), Theme.S(20)));
-                string sub = it.Start.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-                if (it.Recurrence != RecurrenceType.None) sub += " · " + it.RecurrenceText;
-                if (!string.IsNullOrEmpty(it.Location)) sub += " · " + it.Location;
-                Theme.TextLeft(g, sub, Theme.FSmall, Theme.TextMuted, new Rectangle(row.X + Theme.S(16), row.Y + Theme.S(21), row.Width - Theme.S(22), Theme.S(18)));
+                Theme.TextLeft(g, it.Subtitle, Theme.FSmall, Theme.TextMuted, new Rectangle(row.X + Theme.S(16), row.Y + Theme.S(21), row.Width - Theme.S(22), Theme.S(18)));
             }
         }
 
@@ -224,6 +240,7 @@ namespace QingLi
     {
         private readonly EventStore _store;
         private readonly ReminderService _reminders;
+        private readonly HolidayService _holidays;
 
         private CalendarView _view = CalendarView.Month;
         private DateTime _anchor = DateTime.Today;
@@ -255,10 +272,11 @@ namespace QingLi
         private bool _reallyExit;
         private bool _balloonShown;
 
-        public MainForm(EventStore store, ReminderService reminders)
+        public MainForm(EventStore store, ReminderService reminders, HolidayService holidays)
         {
             _store = store;
             _reminders = reminders;
+            _holidays = holidays;
 
             Ui.StyleForm(this);
             Text = "轻历 - 日程与提醒";
@@ -287,6 +305,13 @@ namespace QingLi
             LayoutAll();
             RefreshAll();
             if (_view != CalendarView.Month) _timeView.ScrollToTime(DateTime.Today.AddHours(8));
+
+            // 节假日数据：视图挂载 + 后台自动拉取（完成后回到 UI 线程刷新）
+            _monthView.Holidays = _holidays;
+            _timeView.Holidays = _holidays;
+            _mini.Holidays = _holidays;
+            _holidays.Updated += OnHolidaysUpdated;
+            _holidays.RefreshAsync();
         }
 
         // ---------------- 界面构建 ----------------
@@ -369,7 +394,7 @@ namespace QingLi
             _search.BackColor = Theme.Surface;
             _search.ForeColor = Theme.TextPrimary;
             _search.Font = Theme.FBody;
-            _search.Placeholder = "搜索标题 / 地点 / 备注";
+            _search.Placeholder = "搜索标题 / 地点 / 节假日（支持 calendar）";
             _search.TextChanged += delegate { UpdateSearch(); };
             _search.KeyDown += OnSearchKeyDown;
             _search.GotFocus += delegate { UpdateSearch(); };
@@ -483,7 +508,7 @@ namespace QingLi
 
             _searchList = new SearchList();
             _searchList.Dock = DockStyle.Fill;
-            _searchList.Activated += delegate (EventItem e) { OpenFromSearch(e); };
+            _searchList.Activated += delegate (SearchHit hit) { OpenFromSearch(hit); };
             _searchPanel.Controls.Add(_searchList);
         }
 
@@ -572,10 +597,15 @@ namespace QingLi
             _title.Text = TitleText();
             UpdateSidebar();
             RefreshMiniMarks();
+            UpdateStatus();
+        }
 
+        /// <summary>状态栏：日程总数与节假日数据来源。</summary>
+        private void UpdateStatus()
+        {
             int total = _store.Data.Events.Count;
             _statusLeft.Text = "数据文件：" + _store.DataFile;
-            _statusRight.Text = string.Format("共 {0} 条日程 · 本地存储 · 无需联网", total);
+            _statusRight.Text = string.Format("共 {0} 条日程 · 节假日：{1}", total, _holidays.StatusText);
         }
 
         private void RefreshMiniMarks()
@@ -600,9 +630,33 @@ namespace QingLi
 
         private void UpdateSidebar()
         {
-            _sideTitle.Text = "日程 · " + _selected.ToString("M月d日", CultureInfo.InvariantCulture) + " " + DateField.WeekName(_selected);
+            string title = "日程 · " + _selected.ToString("M月d日", CultureInfo.InvariantCulture) + " " + DateField.WeekName(_selected);
+            HolidayInfo hi = _holidays.GetDay(_selected.Date);
+            if (hi != null) title += hi.IsOffDay ? " · " + hi.Name : " · 调休上班";
+            _sideTitle.Text = title;
             List<Occurrence> list = _store.ExpandRange(_selected.Date, _selected.Date.AddDays(1));
             _agenda.SetItems(_selected, list);
+        }
+
+        /// <summary>节假日数据后台刷新完成后回到 UI 线程刷新界面。</summary>
+        private void OnHolidaysUpdated()
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke(new Action(delegate
+                {
+                    _monthView.Reload();
+                    _timeView.Reload();
+                    _mini.Invalidate();
+                    UpdateSidebar();
+                    UpdateStatus();
+                }));
+            }
+            catch
+            {
+                // 窗口已关闭等情况直接忽略
+            }
         }
 
         private string TitleText()
@@ -786,7 +840,7 @@ namespace QingLi
             m.Items.Add("关于轻历", null, delegate
             {
                 MessageBox.Show(this,
-                    "轻历 1.0.0\n\n一个本地优先的 Windows 日程应用：月 / 周 / 日视图、重复日程、到点提醒、ICS 导入导出。\n数据保存在本机，不联网。\n\n数据目录：" + _store.DataDir,
+                    "轻历 1.1.0\n\n一个本地优先的 Windows 日程应用：月 / 周 / 日视图、重复日程、到点提醒、ICS 导入导出、中国法定节假日与调休展示。\n节假日数据自动从公开数据源拉取并本地缓存，断网时使用内置数据；搜索支持 calendar / calander 英文关键词。\n数据目录：" + _store.DataDir,
                     "关于轻历", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             m.Show(_more, new Point(0, _more.Height + Theme.S(2)));
@@ -813,20 +867,57 @@ namespace QingLi
                 return;
             }
 
-            List<EventItem> hits = new List<EventItem>();
+            List<SearchHit> hits = new List<SearchHit>();
+
+            // 1) calendar / calander 英文关键词：作为命令置顶（两种拼写等价）
+            if (HolidayService.IsCalendarKeyword(q))
+            {
+                SearchHit cmd = new SearchHit();
+                cmd.Title = "回到今天（Calendar）";
+                cmd.Subtitle = "回车或点击跳转到今天 · 支持 calendar / calander 拼写";
+                cmd.IsCalendarCommand = true;
+                hits.Add(cmd);
+            }
+
+            // 2) 节假日 / 调休：中文名与英文别名均可命中（如 national day → 国庆节）
+            List<HolidayInfo> hols = _holidays.SearchHolidays(q, 3);
+            for (int i = 0; i < hols.Count; i++)
+            {
+                HolidayInfo hi = hols[i];
+                SearchHit h = new SearchHit();
+                h.Title = hi.Name + (hi.IsOffDay ? " · 法定放假" : " · 调休上班");
+                h.Subtitle = hi.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " " +
+                             DateField.WeekName(hi.Date) + " · 点击跳转到这一天";
+                h.IsHoliday = true;
+                h.JumpDate = hi.Date;
+                hits.Add(h);
+            }
+
+            // 3) 日程：按标题 / 地点 / 备注过滤，按接近现在排序
+            List<SearchHit> eventHits = new List<SearchHit>();
+            DateTime now = DateTime.Now;
             for (int i = 0; i < _store.Data.Events.Count; i++)
             {
                 EventItem e = _store.Data.Events[i];
-                if (Contains(e.Title, q) || Contains(e.Location, q) || Contains(e.Notes, q))
-                    hits.Add(e);
+                if (!Contains(e.Title, q) && !Contains(e.Location, q) && !Contains(e.Notes, q)) continue;
+                SearchHit h = new SearchHit();
+                h.Title = e.Title;
+                string sub = e.Start.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                if (e.Recurrence != RecurrenceType.None) sub += " · " + e.RecurrenceText;
+                if (!string.IsNullOrEmpty(e.Location)) sub += " · " + e.Location;
+                h.Subtitle = sub;
+                h.ColorIndex = e.ColorIndex;
+                h.Event = e;
+                eventHits.Add(h);
             }
-            DateTime now = DateTime.Now;
-            hits.Sort(delegate (EventItem a, EventItem b)
+            eventHits.Sort(delegate (SearchHit a, SearchHit b)
             {
-                long da = Math.Abs((a.Start - now).Ticks);
-                long db = Math.Abs((b.Start - now).Ticks);
+                long da = Math.Abs((a.Event.Start - now).Ticks);
+                long db = Math.Abs((b.Event.Start - now).Ticks);
                 return da.CompareTo(db);
             });
+            hits.AddRange(eventHits);
+
             if (hits.Count > 8) hits = hits.GetRange(0, 8);
 
             _searchList.SetItems(hits);
@@ -852,8 +943,8 @@ namespace QingLi
             }
             if (e.KeyCode == Keys.Enter)
             {
-                EventItem it = _searchList.Current;
-                if (it != null) OpenFromSearch(it);
+                SearchHit hit = _searchList.Current;
+                if (hit != null) OpenFromSearch(hit);
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -871,12 +962,29 @@ namespace QingLi
             }
         }
 
-        private void OpenFromSearch(EventItem e)
+        private void OpenFromSearch(SearchHit hit)
         {
+            if (hit == null) return;
             _search.Text = "";
             _searchPanel.Visible = false;
-            GoToDate(e.Start.Date);
-            EventItem fresh = _store.Find(e.Id);
+
+            // calendar / calander 命令：回到今天
+            if (hit.IsCalendarCommand)
+            {
+                GoToday();
+                return;
+            }
+
+            // 节假日：跳转到对应日期
+            if (hit.IsHoliday)
+            {
+                GoToDate(hit.JumpDate);
+                return;
+            }
+
+            // 日程：跳转并打开编辑
+            GoToDate(hit.Event.Start.Date);
+            EventItem fresh = _store.Find(hit.Event.Id);
             if (fresh == null) return;
             Occurrence occ = new Occurrence();
             occ.Source = fresh;
