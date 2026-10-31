@@ -35,27 +35,52 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "TestHoliday compile failed" }
           & build\TestHoliday.exe
           if ($LASTEXITCODE -ne 0) { throw "TestHoliday failed" }
+          & $csc /nologo /target:exe /codepage:65001 /out:build\TestTheme.exe tests\TestTheme.cs src\Theme.cs src\Models.cs src\Ics.cs /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Xml.dll
+          if ($LASTEXITCODE -ne 0) { throw "TestTheme compile failed" }
+          & build\TestTheme.exe
+          if ($LASTEXITCODE -ne 0) { throw "TestTheme failed" }
 
       - name: Create or update GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           $exe = Get-ChildItem dist\QingLi-Setup-*.exe | Select-Object -First 1
           if ($exe -eq $null) { throw "installer not found in dist" }
           $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
-          $notes = @"
-          ## 轻历 QingLi $env:GITHUB_REF_NAME
+          $tag = $env:GITHUB_REF_NAME
+          $notes = @'
+          ## 轻历 QingLi __TAG__
 
-          ### 新增
-          - **开始界面搜索**：支持英文关键词 `calendar` / `calander`（拼写变体等价），回车回到今天；节假日支持中文名与英文别名搜索（如 `national day` → 国庆节、`spring festival` → 春节），`holiday` 列出即将到来的节假日
-          - **中国法定节假日与调休自动展示**：从 holiday-cn 公开数据（jsDelivr 多数据源回退）自动拉取当年与次年安排并本地缓存，断网自动回退内置快照；月 / 周 / 日视图与迷你月历标注「休」「班」，侧栏与状态栏同步显示
+          ### 新增：白天 / 黑夜主题模式
+          - 三档主题「跟随系统 / 始终浅色 / 始终深色」：入口在 `⋯` →「主题」与托盘右键「主题」，三项单选带勾选，切换即时生效、立即写盘、不重启；快捷键 `Ctrl+Shift+L` 循环切换。
+          - 「跟随系统」下，系统切换深浅色后应用 2 秒内自动跟随（含已打开的编辑对话框与提醒气泡），进程不重启。
+          - 默认值：全新安装为「跟随系统」；从 1.1.0 升级（`data.xml` 无 `<Theme>`）默认「始终深色」以保持旧外观。
+          - 深色沿用 1.1.0 的 Win11 Dark 外观，浅色为白底深字；两套配色经 WCAG 2.1 AA（正文 ≥4.5:1）校验，覆盖今天高亮、周末、节假日「休」/ 调休「班」徽标、选中态与弱化文字。
+          - 主题写入 `data.xml` 的 `<Theme>` 字段（`system` / `light` / `dark`），非法值与损坏配置文件自动回退，不崩溃。
+          - 标题栏深浅双向切换（DWM 沉浸式属性），托盘菜单与提醒气泡随主题重绘。
+
+          ### 修复
+          - 主题：选中日期格描边对比度提升（描边改用强调色 2px，选中格不再叠加悬停底色），并新增自动化断言防止回退；文档 `docs/theme-modes.md` 两处对比度数值按实测更正。
 
           ### 安装
           下载 `QingLi-Setup-*.exe` 直接安装（免管理员权限，Windows 7 SP1+ / .NET Framework 4.6+）。
 
-          **文件校验（SHA256）**： ``$hash``
-          "@
+          ### 用户须知
+          - 安装包未签名，首次运行会触发 SmartScreen「未知发布者」提示，点「更多信息 → 仍要运行」即可。
+          - 静默卸载（`/VERYSILENT` 或 `/SILENT`）不会弹出询问框，会无提示删除 `%APPDATA%\QingLi` 中的日程与缓存。日常卸载请用交互式卸载并在弹窗里选「否」保留数据；脚本化卸载前请先自行备份。（1.1.0 同样行为，本次仅在文档层面提示。）
+
+          ### 已知限制
+          - 深色下多行「备注」输入框的滚动条仍为系统原生浅色（1.1.0 既有，需自绘滚动条）。
+          - 系统 `MessageBox`（删除确认、关于）由系统绘制，不随应用主题变化。
+          - Win7 或关闭 DWM 时，深色主题下标题栏仍为系统浅色（客户区正常）。
+          - 高 DPI 125% / 150% 本次未实测（未改动尺寸 / 字体 / 间距）。
+
+          ### 文件校验（SHA256）
+          `__SHA256__`
+          '@
+          $notes = $notes.Replace('__TAG__', $tag).Replace('__SHA256__', $hash)
           $notes | Out-File -Encoding utf8 notes.md
           gh release view "$env:GITHUB_REF_NAME" *> $null
           if ($LASTEXITCODE -eq 0) {
