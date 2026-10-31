@@ -136,6 +136,9 @@ namespace QingLi
         public bool MinimizeToTray = true;
         public bool CloseToTray = true;
         public string LastExportPath = "";
+
+        /// <summary>主题档位：system / light / dark。空串表示未设置（区分全新安装与升级，见 Theme.ResolveInitialMode）。</summary>
+        public string Theme = "";
     }
 
     [XmlRoot("QingLiData")]
@@ -152,6 +155,15 @@ namespace QingLi
         public AppData Data;
         public readonly string DataDir;
         public readonly string DataFile;
+
+        /// <summary>加载前 data.xml 是否已存在（全新安装判定）。</summary>
+        public bool FileExistedAtLoad;
+
+        /// <summary>加载的文件里是否出现过 &lt;Theme&gt; 元素（1.1.0 升级判定）。</summary>
+        public bool FileHasThemeElement;
+
+        /// <summary>加载失败（XML 非法）后按全新安装处理，避免把损坏文件当成升级。</summary>
+        public bool LoadFailed;
 
         public event EventHandler Changed;
 
@@ -170,11 +182,23 @@ namespace QingLi
 
         public void Load()
         {
+            FileExistedAtLoad = false;
+            FileHasThemeElement = false;
+            LoadFailed = false;
             try
             {
                 if (!Directory.Exists(DataDir)) Directory.CreateDirectory(DataDir);
                 if (File.Exists(DataFile))
                 {
+                    FileExistedAtLoad = true;
+                    try
+                    {
+                        string raw = File.ReadAllText(DataFile);
+                        FileHasThemeElement = raw.IndexOf("<Theme", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                    catch
+                    {
+                    }
                     using (FileStream fs = new FileStream(DataFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
                         XmlSerializer ser = new XmlSerializer(typeof(AppData));
@@ -185,6 +209,9 @@ namespace QingLi
             }
             catch (Exception)
             {
+                LoadFailed = true;
+                FileExistedAtLoad = false;
+                FileHasThemeElement = false;
                 try
                 {
                     if (File.Exists(DataFile))

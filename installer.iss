@@ -1,5 +1,5 @@
 ﻿#define AppName "轻历"
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 #define AppExe "QingLi.exe"
 
 [Setup]

@@ -139,7 +139,7 @@ namespace QingLi
                     bool isHoliday = hi != null && hi.IsOffDay;
                     bool isMakeup = hi != null && !hi.IsOffDay;
                     if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
-                    Color numColor = isToday ? Color.White : (inMonth ? Theme.TextPrimary : Theme.TextMuted);
+                    Color numColor = isToday ? Theme.OnAccent : (inMonth ? Theme.TextPrimary : Theme.TextMuted);
                     if (!isToday && inMonth)
                     {
                         // 调休上班的周末按工作日着色；普通周末用休息色；法定假日用节日色
@@ -154,8 +154,8 @@ namespace QingLi
                     if (inMonth && (isHoliday || isMakeup))
                     {
                         string tag = isHoliday ? "休" : "班";
-                        Color tagBg = isHoliday ? Theme.Mix(Theme.Surface, Theme.Holiday, 0.22f) : Theme.WorkdayBadge;
-                        Color tagFg = isHoliday ? Theme.Holiday : Theme.TextSecondary;
+                        Color tagBg = isHoliday ? Theme.HolidayBadgeBg : Theme.WorkdayBadge;
+                        Color tagFg = isHoliday ? Theme.Holiday : Theme.WorkdayBadgeText;
                         Rectangle badge = new Rectangle(circle.Right + Theme.S(3), circle.Y + Theme.S(4), Theme.S(16), Theme.S(16));
                         Theme.FillRound(g, badge, Theme.S(4), tagBg);
                         Theme.TextCBare(g, tag, Theme.FSmall, tagFg, badge);

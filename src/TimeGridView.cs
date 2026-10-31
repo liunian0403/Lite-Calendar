@@ -191,7 +191,7 @@ namespace QingLi
                 Rectangle circle = new Rectangle(hr.X + (colW - dia) / 2, Theme.S(22), dia, dia);
                 if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
                 Theme.TextC(g, d.Day.ToString(CultureInfo.InvariantCulture), isToday ? Theme.FBodyBold : Theme.FBody,
-                    isToday ? Color.White : (isHoliday ? Theme.Holiday : Theme.TextPrimary), circle);
+                    isToday ? Theme.OnAccent : (isHoliday ? Theme.Holiday : Theme.TextPrimary), circle);
 
                 // 表头右侧显示节假日 / 调休标记
                 if (hi != null && !isToday)

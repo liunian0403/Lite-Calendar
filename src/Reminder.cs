@@ -38,6 +38,15 @@ namespace QingLi
             _life = new Timer();
             _life.Interval = 25000;
             _life.Tick += delegate { Close(); };
+
+            // 已显示的提醒气泡也要跟随主题切换
+            Theme.Changed += OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            BackColor = Theme.Surface;
+            Invalidate();
         }
 
         protected override bool ShowWithoutActivation
@@ -70,6 +79,8 @@ namespace QingLi
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             Open.Remove(this);
+            Theme.Changed -= OnThemeChanged;
+            if (_life != null) _life.Dispose();
             Reposition();
             base.OnFormClosed(e);
         }
@@ -113,7 +124,7 @@ namespace QingLi
             Theme.DrawRound(g, _snoozeRect, Theme.S(5), Theme.Border, 1f);
             Theme.TextC(g, "5 分钟后提醒", Theme.FSmall, Theme.TextPrimary, _snoozeRect);
             Theme.FillRound(g, _okRect, Theme.S(5), _hoverOk ? Theme.AccentFillHover : Theme.AccentFill);
-            Theme.TextC(g, "知道了", Theme.FSmall, Color.White, _okRect);
+            Theme.TextC(g, "知道了", Theme.FSmall, Theme.OnAccent, _okRect);
         }
 
         protected override void OnMouseMove(MouseEventArgs e)

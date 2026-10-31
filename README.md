@@ -2,7 +2,7 @@
 
 一个**本地优先**的 Windows 日程与提醒应用：月 / 周 / 日三种视图，事件增删改查，每天 / 每周 / 每月 / 工作日重复，到点提醒（托盘常驻 + 右下角气泡），ICS 导入导出，事件搜索，中国法定节假日与调休自动展示，左侧迷你月历定位。日程数据保存在本机；节假日数据从公开数据源自动拉取并本地缓存，断网时使用内置数据。
 
-- 安装包：`QingLi-Setup-1.1.0.exe`（Inno Setup 制作，中文向导，装到 `%LOCALAPPDATA%\Programs\QingLi`，免管理员权限）
+- 安装包：`QingLi-Setup-1.2.0.exe`（Inno Setup 制作，中文向导，装到 `%LOCALAPPDATA%\Programs\QingLi`，免管理员权限）
 - 系统要求：Windows 7 SP1 及以上（Windows 10 / 11 体验最佳），.NET Framework 4.6+（Win10/11 已内置）
 
 ## 功能
@@ -28,8 +28,9 @@
 - 左侧迷你月历：点击日期跳转，带事件小圆点，可翻月，节假日日期标红
 - 左侧「当日日程」列表：点击条目直接编辑；标题附带当天节假日 / 调休信息
 - 系统托盘常驻：关闭窗口最小化到托盘（气泡提示一次），托盘菜单可新建 / 打开 / 今天 / 退出
-- `⋯` 菜单：导入 ICS、导出全部日程为 ICS（RFC 5545：`RRULE`、`VALARM`、转义与折行、UTC 时间）、打开数据文件夹、关于
-- Win11 风格深色主题，自绘控件、深色圆角标题栏、DPI 感知
+- `⋯` 菜单：导入 ICS、导出全部日程为 ICS（RFC 5545：`RRULE`、`VALARM`、转义与折行、UTC 时间）、主题、打开数据文件夹、关于
+- 白天 / 黑夜主题：三档「跟随系统 / 始终浅色 / 始终深色」，入口在 `⋯` →「主题」与托盘右键「主题」，选中即生效、立即写盘，不重启、不重载日程；「跟随系统」会在系统切换深浅色后 2 秒内自动跟随（含已打开的编辑对话框与提醒气泡）。深色沿用 1.1.0 的 Win11 Dark 外观，浅色为白底深字，两套配色均按 WCAG 2.1 AA（正文 ≥ 4.5:1）校验
+- Win11 风格自绘控件、深浅两套标题栏（DWM 沉浸式属性双向切换）、DPI 感知
 
 ### 快捷键
 
@@ -38,6 +39,7 @@
 | `Ctrl+N` | 新建日程（当前选中日期） |
 | `Ctrl+F` | 聚焦搜索框 |
 | `Ctrl+1/2/3` | 月 / 周 / 日视图 |
+| `Ctrl+Shift+L` | 循环切换主题（跟随系统 → 始终浅色 → 始终深色） |
 | `T` | 回到今天 |
 | 方向键 | 月视图中移动选中日期 |
 | `Enter` | 在选中日期新建日程 |
@@ -60,12 +62,14 @@
 │   ├── JsonLite.cs      # 极简 JSON 解析器（无第三方依赖）
 │   ├── Ics.cs           # ICS (RFC 5545) 导入导出
 │   ├── Reminder.cs      # 提醒调度 + 气泡
-│   ├── Theme.cs         # 配色 / 圆角 / 深色标题栏
+│   ├── Theme.cs         # 深浅两套调色板、语义令牌、主题档位、系统主题、标题栏
+│   ├── AssemblyInfo.cs  # 程序集版本号（与 installer.iss 的 AppVersion 同步）
 │   └── app.manifest     # DPI / 兼容性声明
 ├── tests/
 │   ├── TestCore.cs      # 数据层自动化测试（22 项断言）
-│   └── TestHoliday.cs   # 节假日 / JSON / 搜索关键词测试（33 项断言）
-├── tools/               # UI 实测辅助脚本（屏幕坐标驱动 + 截图）
+│   ├── TestHoliday.cs   # 节假日 / JSON / 搜索关键词测试（33 项断言）
+│   └── TestTheme.cs     # 主题 / 对比度 / 持久化测试（113 项断言）
+├── tools/               # UI 实测辅助脚本（屏幕坐标驱动 + 截图）+ verify.ps1 回归脚本
 ├── installer.iss        # Inno Setup 安装脚本
 ├── zh-CN.isl            # Inno Setup 中文消息表
 └── build.ps1            # 一键构建：生成图标 → csc 编译 → ISCC 打包
@@ -84,7 +88,7 @@
 powershell -ExecutionPolicy Bypass -File build.ps1
 # [1/3] 生成多尺寸 app.ico（System.Drawing 绘制）
 # [2/3] csc 编译 src\*.cs -> build\QingLi.exe（带图标与 DPI manifest）
-# [3/3] ISCC 打包 installer.iss -> dist\QingLi-Setup-1.1.0.exe
+# [3/3] ISCC 打包 installer.iss -> dist\QingLi-Setup-1.2.0.exe
 ```
 
 ## 测试
@@ -101,6 +105,19 @@ build\TestCore.exe      # 退出码 0 表示全部通过
 ```powershell
 csc /target:exe /out:build\TestHoliday.exe tests\TestHoliday.cs src\HolidayService.cs src\HolidayData.cs src\JsonLite.cs
 build\TestHoliday.exe   # 退出码 0 表示全部通过
+```
+
+主题有 113 项自动化断言（三档解析与非法值回退、全新安装 / 升级默认值、深浅两套调色板取值、WCAG 2.1 AA 对比度、事件 8 色映射、`<Theme>` 写入读回、损坏文件备份回退、主题变更广播）：
+
+```powershell
+csc /target:exe /out:build\TestTheme.exe tests\TestTheme.cs src\Theme.cs src\Models.cs src\Ics.cs /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Xml.dll
+build\TestTheme.exe     # 退出码 0 表示全部通过
+```
+
+一键回归（编译应用 + 三个测试套件 + 主题静态约束 + 版本号一致性）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\verify.ps1
 ```
 
 UI 层验证脚本在 `tools/`（屏幕坐标驱动 + 逐步截图，因自绘控件无无障碍句柄，未走 UIAutomation）。
@@ -121,6 +138,8 @@ UI 层验证脚本在 `tools/`（屏幕坐标驱动 + 逐步截图，因自绘�
 6. 安装包未签名，首次运行可能弹 SmartScreen「未知发布者」，点「仍要运行」即可
 7. 中文安装界面覆盖向导主流程，少数边缘提示串（磁盘空间不足、文件占用等）回退英文
 8. 节假日数据依赖上游 holiday-cn 的年度发布节奏：次年安排通常在当年 11–12 月公布，公布前应用内次年节假日为空（联网成功后自动补全）；内置快照为构建期数据
+9. 主题：Win7 或关闭 DWM 时，深色主题下标题栏仍为系统浅色（客户区正常，属已知限制）；`MessageBox`（删除确认、关于）由系统绘制，不随应用主题变化
+10. 主题默认值：全新安装为「跟随系统」，从 1.1.0 升级（`data.xml` 无 `<Theme>`）为「始终深色」以保持旧外观；若退回 1.1.0 版程序使用，其保存时会丢弃 `<Theme>`，再回到 1.2.0 会按升级情形重新按深色处理
 
 ## 卸载
 
