@@ -154,6 +154,7 @@ namespace QingLi
             c1.AutoSize = false;
             c1.TextAlign = ContentAlignment.MiddleCenter;
             c1.ForeColor = Theme.TextSecondary;
+            c1.Tag = ThemeRole.Secondary;
             c1.BackColor = Color.Transparent;
             c1.SetBounds(x + dateW + Theme.S(8) + timeW - Theme.S(2), Theme.S(98), Theme.S(8), Theme.S(32));
             Controls.Add(c1);
@@ -179,6 +180,7 @@ namespace QingLi
             c2.AutoSize = false;
             c2.TextAlign = ContentAlignment.MiddleCenter;
             c2.ForeColor = Theme.TextSecondary;
+            c2.Tag = ThemeRole.Secondary;
             c2.BackColor = Color.Transparent;
             c2.SetBounds(x + dateW + Theme.S(8) + timeW - Theme.S(2), Theme.S(158), Theme.S(8), Theme.S(32));
             Controls.Add(c2);
@@ -221,6 +223,7 @@ namespace QingLi
             _repeatHint = new Label();
             _repeatHint.AutoSize = false;
             _repeatHint.ForeColor = Theme.TextMuted;
+            _repeatHint.Tag = ThemeRole.Muted;
             _repeatHint.BackColor = Color.Transparent;
             _repeatHint.Font = Theme.FSmall;
             _repeatHint.Text = "";
@@ -258,6 +261,7 @@ namespace QingLi
             _warn = new Label();
             _warn.AutoSize = false;
             _warn.ForeColor = Theme.Danger;
+            _warn.Tag = ThemeRole.Danger;
             _warn.BackColor = Color.Transparent;
             _warn.Font = Theme.FSmall;
             _warn.TextAlign = ContentAlignment.MiddleLeft;
@@ -305,6 +309,22 @@ namespace QingLi
             SetTime(_endHour, _endMin, end);
             SyncAllDay();
             SyncUntil();
+
+            // 打开期间切换主题：对话框内所有控件同步换色，已输入内容不受影响
+            Theme.Changed += OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            Ui.StyleForm(this);
+            Ui.RepaintTheme(this);
+            Theme.ApplyTitleBar(Handle);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Theme.Changed -= OnThemeChanged;
+            base.OnFormClosed(e);
         }
 
         private FlatCombo MakeTimeCombo(bool hours)
@@ -456,7 +476,7 @@ namespace QingLi
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Theme.ApplyDarkTitleBar(Handle);
+            Theme.ApplyTitleBar(Handle);
         }
     }
 }

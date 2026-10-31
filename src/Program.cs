@@ -87,6 +87,7 @@ namespace QingLi
 
                 EventStore store = new EventStore();
                 store.Load();
+                ApplyStartupTheme(store);
 
                 HolidayService holidays = new HolidayService();
                 holidays.Load();
@@ -102,6 +103,31 @@ namespace QingLi
                 {
                     reminders.Dispose();
                     store.Save();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 启动时决定主题档位并应用：全新安装 = 跟随系统；1.1.0 升级（无 &lt;Theme&gt;）= 深色；
+        /// 非法/空值回退跟随系统，并把规范化的小写值写回文件。
+        /// </summary>
+        private static void ApplyStartupTheme(EventStore store)
+        {
+            string saved = store.Data.Settings.Theme;
+            ThemeMode mode = Theme.ResolveInitialMode(saved, store.FileExistedAtLoad, store.FileHasThemeElement);
+            Theme.Apply(mode);
+
+            string canonical = Theme.ModeToString(mode);
+            if (!string.Equals(saved, canonical, StringComparison.Ordinal))
+            {
+                store.Data.Settings.Theme = canonical;
+                try
+                {
+                    store.Save();
+                }
+                catch
+                {
+                    // 写盘失败不影响本次会话（设置仍在内存里生效）
                 }
             }
         }

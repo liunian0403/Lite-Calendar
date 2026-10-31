@@ -63,7 +63,7 @@ namespace QingLi
             {
                 case ButtonStyle.Primary:
                     bg = _down ? Theme.AccentFill : (_hover ? Theme.AccentFillHover : Theme.AccentFill);
-                    fg = Color.White;
+                    fg = Theme.OnAccent;
                     border = Color.Transparent;
                     break;
                 case ButtonStyle.Ghost:
@@ -72,15 +72,22 @@ namespace QingLi
                     border = Color.Transparent;
                     break;
                 case ButtonStyle.Danger:
-                    bg = _down ? Theme.Mix(Theme.Surface, Theme.Danger, 0.35f) : (_hover ? Theme.Mix(Theme.Surface, Theme.Danger, 0.25f) : Theme.Surface);
-                    fg = Theme.Danger;
-                    border = Theme.Mix(Theme.Surface, Theme.Danger, 0.4f);
+                    bg = _down ? Theme.DangerSoftHover : (_hover ? Theme.DangerSoftBg : Theme.Surface);
+                    fg = Theme.DangerSoftText;
+                    border = Theme.Mix(Theme.DangerSoftBg, Theme.DangerSoftText, 0.35f);
                     break;
                 default:
                     bg = _down ? Theme.SurfaceHover : (_hover ? Theme.SurfaceHi : Theme.Surface);
                     fg = Theme.TextPrimary;
                     border = Theme.Border;
                     break;
+            }
+
+            if (!Enabled)
+            {
+                bg = Theme.DisabledFill;
+                fg = Theme.DisabledText;
+                border = Theme.Border;
             }
 
             int radius = Theme.S(6);
@@ -308,7 +315,7 @@ namespace QingLi
 
                     Color tc;
                     HolidayInfo hi = (Holidays != null && inMonth) ? Holidays.GetDay(d) : null;
-                    if (isToday) tc = Color.White;
+                    if (isToday) tc = Theme.OnAccent;
                     else if (!inMonth) tc = Theme.TextMuted;
                     else if (hi != null && hi.IsOffDay) tc = Theme.Holiday;
                     else if (hi != null && !hi.IsOffDay) tc = Theme.TextPrimary; // 调休上班的周末按工作日着色
@@ -442,11 +449,13 @@ namespace QingLi
             Graphics g = e.Graphics;
             Theme.Smooth(g);
             Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
-            Theme.FillRound(g, r, Theme.S(6), Theme.Surface);
+            Color bg = Enabled ? Theme.Surface : Theme.DisabledFill;
+            Color fg = Enabled ? Theme.TextPrimary : Theme.DisabledText;
+            Theme.FillRound(g, r, Theme.S(6), bg);
             Theme.DrawRound(g, r, Theme.S(6), Theme.Border, 1f);
-            Theme.TextLeft(g, FormatDate(_value), Theme.FBody, Theme.TextPrimary,
+            Theme.TextLeft(g, FormatDate(_value), Theme.FBody, fg,
                 new Rectangle(Theme.S(10), 0, Width - Theme.S(30), Height));
-            Theme.TextRight(g, "\u25BE", Theme.FSmall, Theme.TextMuted, new Rectangle(0, 0, Width - Theme.S(9), Height));
+            Theme.TextRight(g, "\u25BE", Theme.FSmall, Enabled ? Theme.TextMuted : Theme.DisabledText, new Rectangle(0, 0, Width - Theme.S(9), Height));
         }
 
         public static string WeekName(DateTime d)
@@ -517,13 +526,20 @@ namespace QingLi
             Graphics g = e.Graphics;
             bool sel = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
             bool active = (e.State & DrawItemState.ComboBoxEdit) == DrawItemState.ComboBoxEdit;
-            Color bg = sel ? Theme.AccentFill : (active ? Theme.Surface : Theme.SurfaceHi);
+            bool on = Enabled;
+            Color bg = sel && on ? Theme.AccentFill : (active ? Theme.Surface : Theme.SurfaceHi);
+            Color fg = sel && on ? Theme.OnAccent : Theme.TextPrimary;
+            if (!on)
+            {
+                bg = Theme.DisabledFill;
+                fg = Theme.DisabledText;
+            }
             using (SolidBrush b = new SolidBrush(bg)) g.FillRectangle(b, e.Bounds);
             if (e.Index >= 0)
             {
                 TextRenderer.DrawText(g, Items[e.Index].ToString(), Font,
                     new Rectangle(e.Bounds.X + Theme.S(8), e.Bounds.Y, e.Bounds.Width - Theme.S(10), e.Bounds.Height),
-                    sel ? Color.White : Theme.TextPrimary,
+                    fg,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
             }
         }
@@ -564,12 +580,13 @@ namespace QingLi
                 g.FillRectangle(b, 0, 0, Width, Height);
             int box = Theme.S(16);
             Rectangle r = new Rectangle(0, (Height - box) / 2, box, box);
-            Color bg = Checked ? Theme.AccentFill : (_hover ? Theme.SurfaceHover : Theme.Surface);
+            Color bg = Checked ? Theme.AccentFill : (_hover && Enabled ? Theme.SurfaceHover : Theme.Surface);
+            if (!Enabled) bg = Theme.DisabledFill;
             Theme.FillRound(g, r, Theme.S(4), bg);
             Theme.DrawRound(g, r, Theme.S(4), Checked ? Theme.AccentFill : Theme.BorderStrong, 1f);
             if (Checked)
             {
-                using (Pen p = new Pen(Color.White, Theme.SF(1.9f)))
+                using (Pen p = new Pen(Theme.OnAccent, Theme.SF(1.9f)))
                 {
                     p.StartCap = LineCap.Round;
                     p.EndCap = LineCap.Round;
@@ -582,7 +599,8 @@ namespace QingLi
                     });
                 }
             }
-            Theme.TextLeft(g, Text, Font, ForeColor, new Rectangle(box + Theme.S(8), 0, Width - box - Theme.S(8), Height));
+            Color textColor = Enabled ? ForeColor : Theme.DisabledText;
+            Theme.TextLeft(g, Text, Font, textColor, new Rectangle(box + Theme.S(8), 0, Width - box - Theme.S(8), Height));
         }
     }
 
@@ -660,6 +678,7 @@ namespace QingLi
             l.ForeColor = Theme.TextMuted;
             l.BackColor = Color.Transparent;
             l.Font = Theme.FSmall;
+            l.Tag = ThemeRole.Muted;
             return l;
         }
 
@@ -683,6 +702,58 @@ namespace QingLi
             f.ForeColor = Theme.TextPrimary;
             f.Font = Theme.FBody;
             f.AutoScaleMode = AutoScaleMode.None;
+        }
+
+        /// <summary>
+        /// 主题切换后的统一重新着色 / 重绘入口：
+        /// 按 Control.Tag 上的 ThemeRole 更新原生控件颜色，再递归重绘所有子控件（自绘控件从令牌取色，重绘即生效）。
+        /// </summary>
+        public static void RepaintTheme(Control root)
+        {
+            if (root == null) return;
+
+            ThemeRole role = root.Tag is ThemeRole ? (ThemeRole)root.Tag : ThemeRole.None;
+            if (role != ThemeRole.None && root is Label)
+            {
+                root.ForeColor = Theme.ColorFor(role);
+                root.BackColor = Color.Transparent;
+            }
+            else if (role != ThemeRole.None && root is Panel)
+            {
+                root.BackColor = Theme.ColorFor(role);
+            }
+
+            FlatTextBox textBox = root as FlatTextBox;
+            if (textBox != null)
+            {
+                textBox.BackColor = Theme.Surface;
+                textBox.ForeColor = Theme.TextPrimary;
+            }
+            FlatCombo combo = root as FlatCombo;
+            if (combo != null)
+            {
+                combo.BackColor = Theme.Surface;
+                combo.ForeColor = Theme.TextPrimary;
+            }
+            FlatCheck check = root as FlatCheck;
+            if (check != null) check.ForeColor = Theme.TextPrimary;
+            UiButton button = root as UiButton;
+            if (button != null) button.ForeColor = Theme.TextPrimary;
+
+            MonthView month = root as MonthView;
+            if (month != null) month.BackColor = Theme.Window;
+            TimeGridView time = root as TimeGridView;
+            if (time != null) time.BackColor = Theme.Window;
+            SearchList hits = root as SearchList;
+            if (hits != null) hits.BackColor = Theme.Surface;
+            AgendaList agenda = root as AgendaList;
+            if (agenda != null) agenda.BackColor = Color.Transparent;
+            FieldBox field = root as FieldBox;
+            if (field != null) field.BackColor = Theme.Window;
+
+            root.Invalidate();
+            for (int i = 0; i < root.Controls.Count; i++)
+                RepaintTheme(root.Controls[i]);
         }
     }
 }

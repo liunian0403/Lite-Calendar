@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace QingLi
@@ -269,6 +270,10 @@ namespace QingLi
         private Panel _searchPanel;
         private SearchList _searchList;
         private NotifyIcon _tray;
+        private ContextMenuStrip _trayMenu;
+        private ToolStripMenuItem _trayThemeItem;
+        private Timer _themeWatch;
+        private Timer _hintTimer;
         private bool _reallyExit;
         private bool _balloonShown;
 
@@ -299,6 +304,26 @@ namespace QingLi
             _reminders.ReminderDue += OnReminderDue;
             _store.Changed += delegate { RefreshAll(); };
 
+            Theme.Changed += OnThemeChanged;
+
+            // 系统主题广播去抖：500ms 内多次 WM_SETTINGCHANGE 只处理一次
+            _themeWatch = new Timer();
+            _themeWatch.Interval = 500;
+            _themeWatch.Tick += delegate
+            {
+                _themeWatch.Stop();
+                Theme.RefreshFromSystem();
+            };
+
+            // 状态栏临时提示的恢复定时器
+            _hintTimer = new Timer();
+            _hintTimer.Interval = 2000;
+            _hintTimer.Tick += delegate
+            {
+                _hintTimer.Stop();
+                UpdateStatus();
+            };
+
             KeyDown += OnFormKeyDown;
             Resize += delegate { LayoutAll(); };
 
@@ -320,6 +345,7 @@ namespace QingLi
         {
             _top = new Panel();
             _top.BackColor = Theme.Window;
+            _top.Tag = ThemeRole.Window;
             _top.Paint += delegate (object s, PaintEventArgs e)
             {
                 using (Pen p = new Pen(Theme.Mix(Theme.Window, Theme.Border, 0.8f)))
@@ -353,6 +379,7 @@ namespace QingLi
             _title = new Label();
             _title.AutoSize = false;
             _title.ForeColor = Theme.TextPrimary;
+            _title.Tag = ThemeRole.Primary;
             _title.BackColor = Color.Transparent;
             _title.Font = Theme.FBig;
             _title.TextAlign = ContentAlignment.MiddleLeft;
@@ -407,6 +434,7 @@ namespace QingLi
         {
             _sidebar = new Panel();
             _sidebar.BackColor = Theme.Window;
+            _sidebar.Tag = ThemeRole.Window;
             _sidebar.Paint += delegate (object s, PaintEventArgs e)
             {
                 using (Pen p = new Pen(Theme.Mix(Theme.Window, Theme.Border, 0.8f)))
@@ -430,6 +458,7 @@ namespace QingLi
             _sideTitle = new Label();
             _sideTitle.AutoSize = false;
             _sideTitle.ForeColor = Theme.TextSecondary;
+            _sideTitle.Tag = ThemeRole.Secondary;
             _sideTitle.BackColor = Color.Transparent;
             _sideTitle.Font = Theme.FBodyBold;
             _sideTitle.TextAlign = ContentAlignment.MiddleLeft;
@@ -444,6 +473,7 @@ namespace QingLi
         {
             _content = new Panel();
             _content.BackColor = Theme.Window;
+            _content.Tag = ThemeRole.Window;
             Controls.Add(_content);
 
             _monthView = new MonthView();
@@ -476,11 +506,13 @@ namespace QingLi
         {
             _status = new Panel();
             _status.BackColor = Theme.Mix(Theme.Window, Theme.Surface, 0.6f);
+            _status.Tag = ThemeRole.StatusBar;
             Controls.Add(_status);
 
             _statusLeft = new Label();
             _statusLeft.AutoSize = false;
             _statusLeft.ForeColor = Theme.TextMuted;
+            _statusLeft.Tag = ThemeRole.Muted;
             _statusLeft.BackColor = Color.Transparent;
             _statusLeft.Font = Theme.FSmall;
             _statusLeft.TextAlign = ContentAlignment.MiddleLeft;
@@ -489,6 +521,7 @@ namespace QingLi
             _statusRight = new Label();
             _statusRight.AutoSize = false;
             _statusRight.ForeColor = Theme.TextMuted;
+            _statusRight.Tag = ThemeRole.Muted;
             _statusRight.BackColor = Color.Transparent;
             _statusRight.Font = Theme.FSmall;
             _statusRight.TextAlign = ContentAlignment.MiddleRight;
@@ -499,6 +532,7 @@ namespace QingLi
         {
             _searchPanel = new Panel();
             _searchPanel.BackColor = Theme.Surface;
+            _searchPanel.Tag = ThemeRole.Surface;
             _searchPanel.Visible = false;
             _searchPanel.Paint += delegate (object s, PaintEventArgs e)
             {
@@ -520,17 +554,26 @@ namespace QingLi
             _tray.Visible = true;
             _tray.DoubleClick += delegate { RestoreFromTray(); };
 
-            ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Renderer = new DarkMenuRenderer();
-            menu.BackColor = Theme.Surface;
-            menu.ForeColor = Theme.TextPrimary;
-            menu.ShowImageMargin = false;
-            menu.Items.Add("打开轻历", null, delegate { RestoreFromTray(); });
-            menu.Items.Add("新建日程", null, delegate { RestoreFromTray(); NewEventAt(DateTime.Now); });
-            menu.Items.Add("今天", null, delegate { RestoreFromTray(); GoToday(); });
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("退出", null, delegate { _reallyExit = true; Close(); });
-            _tray.ContextMenuStrip = menu;
+            _trayMenu = NewThemeMenu();
+            _trayMenu.Items.Add("打开轻历", null, delegate { RestoreFromTray(); });
+            _trayMenu.Items.Add("新建日程", null, delegate { RestoreFromTray(); NewEventAt(DateTime.Now); });
+            _trayMenu.Items.Add("今天", null, delegate { RestoreFromTray(); GoToday(); });
+            _trayThemeItem = BuildThemeMenu();
+            _trayMenu.Items.Add(_trayThemeItem);
+            _trayMenu.Items.Add(new ToolStripSeparator());
+            _trayMenu.Items.Add("退出", null, delegate { _reallyExit = true; Close(); });
+
+            // 托盘菜单的 BackColor/ForeColor 只在构建期写一次会残留旧配色：每次展开前重新着色并同步勾选
+            _trayMenu.Opening += delegate
+            {
+                _trayMenu.BackColor = Theme.Surface;
+                _trayMenu.ForeColor = Theme.TextPrimary;
+                _trayMenu.Renderer = new ThemeMenuRenderer();
+                _trayThemeItem.DropDown.BackColor = Theme.Surface;
+                _trayThemeItem.DropDown.ForeColor = Theme.TextPrimary;
+                SyncThemeChecks(_trayThemeItem);
+            };
+            _tray.ContextMenuStrip = _trayMenu;
         }
 
         private void LayoutAll()
@@ -802,7 +845,7 @@ namespace QingLi
 
         private void ShowDayMenu(DateTime day, Occurrence occ, Point at)
         {
-            ContextMenuStrip m = NewDarkMenu();
+            ContextMenuStrip m = NewThemeMenu();
             m.Items.Add("新建日程", null, delegate { NewEventAt(day.AddHours(9)); });
             m.Items.Add("新建全天日程", null, delegate { NewEventAt(day, true); });
             if (occ != null)
@@ -816,7 +859,7 @@ namespace QingLi
 
         private void ShowSlotMenu(DateTime day, Occurrence occ, Point at)
         {
-            ContextMenuStrip m = NewDarkMenu();
+            ContextMenuStrip m = NewThemeMenu();
             m.Items.Add("新建日程", null, delegate { NewEventAt(day.Date.AddHours(9)); });
             if (occ != null)
             {
@@ -829,9 +872,10 @@ namespace QingLi
 
         private void ShowMoreMenu()
         {
-            ContextMenuStrip m = NewDarkMenu();
+            ContextMenuStrip m = NewThemeMenu();
             m.Items.Add("导入 ICS 日历…", null, delegate { ImportIcs(); });
             m.Items.Add("导出全部日程为 ICS…", null, delegate { ExportIcs(); });
+            m.Items.Add(BuildThemeMenu());
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("打开数据文件夹", null, delegate
             {
@@ -840,20 +884,84 @@ namespace QingLi
             m.Items.Add("关于轻历", null, delegate
             {
                 MessageBox.Show(this,
-                    "轻历 1.1.0\n\n一个本地优先的 Windows 日程应用：月 / 周 / 日视图、重复日程、到点提醒、ICS 导入导出、中国法定节假日与调休展示。\n节假日数据自动从公开数据源拉取并本地缓存，断网时使用内置数据；搜索支持 calendar / calander 英文关键词。\n数据目录：" + _store.DataDir,
+                    "轻历 1.2.0\n\n一个本地优先的 Windows 日程应用：月 / 周 / 日视图、重复日程、到点提醒、ICS 导入导出、中国法定节假日与调休展示。\n节假日数据自动从公开数据源拉取并本地缓存，断网时使用内置数据；搜索支持 calendar / calander 英文关键词。\n主题支持跟随系统 / 始终浅色 / 始终深色（菜单即时切换，Ctrl+Shift+L 循环）。\n数据目录：" + _store.DataDir,
                     "关于轻历", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             m.Show(_more, new Point(0, _more.Height + Theme.S(2)));
         }
 
-        private static ContextMenuStrip NewDarkMenu()
+        /// <summary>按当前主题创建一个统一着色的右键菜单（主窗口 / 月视图 / 周视图 / 托盘共用）。</summary>
+        private static ContextMenuStrip NewThemeMenu()
         {
             ContextMenuStrip m = new ContextMenuStrip();
-            m.Renderer = new DarkMenuRenderer();
+            m.Renderer = new ThemeMenuRenderer();
             m.BackColor = Theme.Surface;
             m.ForeColor = Theme.TextPrimary;
             m.ShowImageMargin = false;
             return m;
+        }
+
+        /// <summary>「主题」子菜单：主窗口「更多」与托盘右键共用同一份构建逻辑，顺序固定。</summary>
+        private ToolStripMenuItem BuildThemeMenu()
+        {
+            ToolStripMenuItem parent = new ToolStripMenuItem("主题");
+            parent.DropDown.BackColor = Theme.Surface;
+            parent.DropDown.ForeColor = Theme.TextPrimary;
+            parent.DropDownItems.Add(MakeThemeItem("跟随系统", ThemeMode.System));
+            parent.DropDownItems.Add(MakeThemeItem("始终浅色", ThemeMode.Light));
+            parent.DropDownItems.Add(MakeThemeItem("始终深色", ThemeMode.Dark));
+            return parent;
+        }
+
+        private ToolStripMenuItem MakeThemeItem(string text, ThemeMode mode)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(text);
+            item.CheckOnClick = false;
+            item.Checked = Theme.Mode == mode;
+            item.Tag = mode;
+            item.Click += delegate { ApplyThemeMode((ThemeMode)item.Tag); };
+            return item;
+        }
+
+        /// <summary>切换档位：立即应用 + 立即写盘 + 同步菜单勾选 + 状态栏提示，无需重启。</summary>
+        private void ApplyThemeMode(ThemeMode mode)
+        {
+            Theme.Apply(mode);
+
+            _store.Data.Settings.Theme = Theme.ModeToString(mode);
+            _store.Save();
+
+            SyncThemeChecks(_trayThemeItem);
+            Theme.ApplyTitleBar(Handle);
+            ShowThemeHint("已切换到「" + ThemeModeText(mode) + "」");
+        }
+
+        private static string ThemeModeText(ThemeMode mode)
+        {
+            if (mode == ThemeMode.Light) return "始终浅色";
+            if (mode == ThemeMode.Dark) return "始终深色";
+            return "跟随系统";
+        }
+
+        /// <summary>同步「主题」子菜单的勾选状态（菜单展开前与切换后都要调用）。</summary>
+        private void SyncThemeChecks(ToolStripMenuItem parent)
+        {
+            if (parent == null) return;
+            for (int i = 0; i < parent.DropDownItems.Count; i++)
+            {
+                ToolStripMenuItem item = parent.DropDownItems[i] as ToolStripMenuItem;
+                if (item == null || !(item.Tag is ThemeMode)) continue;
+                item.Checked = Theme.Mode == (ThemeMode)item.Tag;
+            }
+        }
+
+        /// <summary>状态栏左侧临时提示 2 秒，结束后恢复「数据文件：...」。</summary>
+        private void ShowThemeHint(string text)
+        {
+            if (_statusLeft == null) return;
+            _statusLeft.Text = text;
+            _hintTimer.Stop();
+            _hintTimer.Start();
         }
 
         // ---------------- 搜索 ----------------
@@ -1092,10 +1200,78 @@ namespace QingLi
             base.OnFormClosing(e);
         }
 
+        /// <summary>主题变化后的统一处理：重新着色主窗口与原生控件、同步标题栏与菜单勾选、通知已打开的其他窗口。</summary>
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            Ui.StyleForm(this);
+
+            _top.BackColor = Theme.Window;
+            _sidebar.BackColor = Theme.Window;
+            _content.BackColor = Theme.Window;
+            _status.BackColor = Theme.Mix(Theme.Window, Theme.Surface, 0.6f);
+            _searchPanel.BackColor = Theme.Surface;
+            _search.BackColor = Theme.Surface;
+            _search.ForeColor = Theme.TextPrimary;
+            _searchBox.BackColor = Theme.Window;
+
+            // 托盘菜单：BackColor/ForeColor 必须重设（只在 BuildTray 写一次会残留旧配色）
+            if (_trayMenu != null)
+            {
+                _trayMenu.BackColor = Theme.Surface;
+                _trayMenu.ForeColor = Theme.TextPrimary;
+                _trayMenu.Renderer = new ThemeMenuRenderer();
+                if (_trayThemeItem != null)
+                {
+                    _trayThemeItem.DropDown.BackColor = Theme.Surface;
+                    _trayThemeItem.DropDown.ForeColor = Theme.TextPrimary;
+                    SyncThemeChecks(_trayThemeItem);
+                }
+            }
+
+            Theme.ApplyTitleBar(Handle);
+            Ui.RepaintTheme(this);
+
+            for (int i = 0; i < Application.OpenForms.Count; i++)
+            {
+                Form f = Application.OpenForms[i];
+                if (f != null && f != this) f.Invalidate(true);
+            }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Theme.Changed -= OnThemeChanged;
+            if (_themeWatch != null) _themeWatch.Dispose();
+            if (_hintTimer != null) _hintTimer.Dispose();
+            base.OnFormClosed(e);
+        }
+
+        // 系统深浅色切换广播：WM_SETTINGCHANGE + lParam = "ImmersiveColorSet"
+        private const int WM_SETTINGCHANGE = 0x001A;
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg != WM_SETTINGCHANGE) return;
+            string area = "";
+            try
+            {
+                if (m.LParam != IntPtr.Zero) area = Marshal.PtrToStringAuto(m.LParam);
+            }
+            catch
+            {
+                return;
+            }
+            if (!string.Equals(area, "ImmersiveColorSet", StringComparison.OrdinalIgnoreCase)) return;
+            if (_themeWatch == null) return;
+            _themeWatch.Stop();
+            _themeWatch.Start();
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Theme.ApplyDarkTitleBar(Handle);
+            Theme.ApplyTitleBar(Handle);
         }
 
         // ---------------- 快捷键 ----------------
@@ -1119,6 +1295,14 @@ namespace QingLi
             if (e.Control && e.KeyCode == Keys.D1) { _seg.SelectedIndex = 0; e.Handled = true; return; }
             if (e.Control && e.KeyCode == Keys.D2) { _seg.SelectedIndex = 1; e.Handled = true; return; }
             if (e.Control && e.KeyCode == Keys.D3) { _seg.SelectedIndex = 2; e.Handled = true; return; }
+            if (e.Control && e.Shift && e.KeyCode == Keys.L)
+            {
+                ThemeMode next = Theme.Mode == ThemeMode.System ? ThemeMode.Light
+                    : Theme.Mode == ThemeMode.Light ? ThemeMode.Dark : ThemeMode.System;
+                ApplyThemeMode(next);
+                e.Handled = true;
+                return;
+            }
             if (typing) return;
 
             if (e.KeyCode == Keys.T)
@@ -1174,6 +1358,7 @@ namespace QingLi
             l.AutoSize = false;
             l.Text = message;
             l.ForeColor = Theme.TextPrimary;
+            l.Tag = ThemeRole.Primary;
             l.BackColor = Color.Transparent;
             l.Font = Theme.FBody;
             l.SetBounds(Theme.S(20), Theme.S(20), Theme.S(380), Theme.S(52));
@@ -1199,26 +1384,41 @@ namespace QingLi
             cancel.SetBounds(Theme.S(290), Theme.S(96), Theme.S(110), Theme.S(34));
             cancel.Click += delegate { _result = 0; Close(); };
             Controls.Add(cancel);
+
+            Theme.Changed += OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            Ui.StyleForm(this);
+            Ui.RepaintTheme(this);
+            Theme.ApplyTitleBar(Handle);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Theme.Changed -= OnThemeChanged;
+            base.OnFormClosed(e);
         }
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Theme.ApplyDarkTitleBar(Handle);
+            Theme.ApplyTitleBar(Handle);
         }
     }
 
-    /// <summary>深色菜单渲染。</summary>
-    public class DarkMenuRenderer : ToolStripProfessionalRenderer
+    /// <summary>主题化菜单渲染：所有色值取自令牌，切换主题后重新展开即为新配色。</summary>
+    public class ThemeMenuRenderer : ToolStripProfessionalRenderer
     {
-        public DarkMenuRenderer() : base(new DarkColorTable())
+        public ThemeMenuRenderer() : base(new ThemeColorTable())
         {
             RoundedEdges = false;
         }
 
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
-            e.TextColor = e.Item.Selected ? Color.White : Theme.TextPrimary;
+            e.TextColor = e.Item.Selected ? Theme.OnAccent : Theme.TextPrimary;
             base.OnRenderItemText(e);
         }
 
@@ -1229,7 +1429,7 @@ namespace QingLi
         }
     }
 
-    public class DarkColorTable : ProfessionalColorTable
+    public class ThemeColorTable : ProfessionalColorTable
     {
         public override Color MenuItemSelected { get { return Theme.AccentFill; } }
         public override Color MenuItemSelectedGradientBegin { get { return Theme.AccentFill; } }

@@ -126,10 +126,12 @@ namespace QingLi
                     bool isSel = d.Date == SelectedDate.Date;
 
                     Color bg = inMonth ? Theme.Surface : Theme.Mix(Theme.Window, Theme.Surface, 0.35f);
-                    if (d.Date == _hoverDate && inMonth) bg = Theme.SurfaceHi;
-                    if (isSel) bg = Theme.Mix(bg, Theme.Accent, 0.10f);
+                    // 选中格不叠加悬停底色：悬停 + 选中的第三态会让格内文字跌破 4.5:1，
+                    // 选中状态统一由 SelectionFill + 2px SelectionBorder 表达
+                    if (d.Date == _hoverDate && inMonth && !isSel) bg = Theme.SurfaceHi;
+                    if (isSel) bg = Theme.SelectionFill;
                     Theme.FillRound(g, cell, Theme.S(6), bg);
-                    if (isSel) Theme.DrawRound(g, cell, Theme.S(6), Theme.Mix(Theme.Accent, Theme.Surface, 0.35f), 1.4f);
+                    if (isSel) Theme.DrawRound(g, cell, Theme.S(6), Theme.SelectionBorder, Theme.SelectionBorderWidth);
                     else if (inMonth) Theme.DrawRound(g, cell, Theme.S(6), Theme.Mix(Theme.Surface, Theme.Border, 0.5f), 1f);
 
                     // 日期数字（文字框比圆圈宽，避免两位数被省略号截断）
@@ -139,7 +141,8 @@ namespace QingLi
                     bool isHoliday = hi != null && hi.IsOffDay;
                     bool isMakeup = hi != null && !hi.IsOffDay;
                     if (isToday) Theme.FillRound(g, circle, dia / 2, Theme.AccentFill);
-                    Color numColor = isToday ? Color.White : (inMonth ? Theme.TextPrimary : Theme.TextMuted);
+                    // 非本月日期默认弱化；被选中时改用次要文字色，避免弱化文字压在选中格底上跌破 4.5:1
+                    Color numColor = isToday ? Theme.OnAccent : (inMonth ? Theme.TextPrimary : (isSel ? Theme.TextSecondary : Theme.TextMuted));
                     if (!isToday && inMonth)
                     {
                         // 调休上班的周末按工作日着色；普通周末用休息色；法定假日用节日色
@@ -154,8 +157,8 @@ namespace QingLi
                     if (inMonth && (isHoliday || isMakeup))
                     {
                         string tag = isHoliday ? "休" : "班";
-                        Color tagBg = isHoliday ? Theme.Mix(Theme.Surface, Theme.Holiday, 0.22f) : Theme.WorkdayBadge;
-                        Color tagFg = isHoliday ? Theme.Holiday : Theme.TextSecondary;
+                        Color tagBg = isHoliday ? Theme.HolidayBadgeBg : Theme.WorkdayBadge;
+                        Color tagFg = isHoliday ? Theme.Holiday : Theme.WorkdayBadgeText;
                         Rectangle badge = new Rectangle(circle.Right + Theme.S(3), circle.Y + Theme.S(4), Theme.S(16), Theme.S(16));
                         Theme.FillRound(g, badge, Theme.S(4), tagBg);
                         Theme.TextCBare(g, tag, Theme.FSmall, tagFg, badge);
@@ -190,7 +193,7 @@ namespace QingLi
                         if (needMore)
                         {
                             Rectangle more = new Rectangle(cell.X + Theme.S(7), top + show * (chipH + gap), cell.Width - Theme.S(10), chipH);
-                            Theme.TextLeft(g, string.Format("还有 {0} 项", items.Count - show), Theme.FSmall, Theme.TextMuted, more);
+                            Theme.TextLeft(g, string.Format("还有 {0} 项", items.Count - show), Theme.FSmall, Theme.TextSecondary, more);
                         }
                     }
                 }
