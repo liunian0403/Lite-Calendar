@@ -83,6 +83,19 @@ class TestTheme
         Console.WriteLine("== " + name + " 事件 8 色 vs 卡片（≥ 3:1）==");
         for (int i = 0; i < Theme.EventColors.Length; i++)
             GraphicPair(name + " 事件色 " + i, Theme.EventColor(i), Theme.Surface);
+
+        Console.WriteLine("== " + name + " 选中日期格（描边 / 格底 / 格内文字）==");
+        // 缺陷 1 回归：描边必须与选中格底 ≥ 3:1（HYPE-26 修复前为深 3.38 / 浅 2.45，浅色不达标）
+        GraphicPair(name + " 选中描边/选中格底", Theme.SelectionBorder, Theme.SelectionFill);
+        Check(Theme.SelectionFill.ToArgb() != Theme.Surface.ToArgb(),
+            name + " 选中格底 " + Code(Theme.SelectionFill) + " 区别于卡片底 " + Code(Theme.Surface) +
+            " = " + Contrast(Theme.SelectionFill, Theme.Surface).ToString("0.00") + ":1（辅助，不单独构成状态）");
+        Check(Theme.SelectionBorderWidth >= 2f, name + " 选中描边宽度 2px（实际 " + Theme.SelectionBorderWidth + "f）");
+        // 选中格内的文字仍须 ≥ 4.5:1（选中格不叠加悬停底色，故只需校验这一种底）
+        TextPair(name + " 主文字/选中格底", Theme.TextPrimary, Theme.SelectionFill);
+        TextPair(name + " 次要文字/选中格底", Theme.TextSecondary, Theme.SelectionFill);
+        TextPair(name + " 周末/选中格底", Theme.Weekend, Theme.SelectionFill);
+        TextPair(name + " 节假日/选中格底", Theme.Holiday, Theme.SelectionFill);
     }
 
     static int Main()

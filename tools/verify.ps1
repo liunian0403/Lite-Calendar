@@ -90,6 +90,12 @@ Check ($theme.Contains("Theme.Changed -= OnThemeChanged") -or $main.Contains("Th
 Check ($main.Contains("Marshal.PtrToStringAuto")) "WM_SETTINGCHANGE lParam 解析"
 Check ($theme.Contains("OnAccent") -and $theme.Contains("DisabledText") -and $theme.Contains("DangerSoftBg") -and $theme.Contains("HolidayBadgeBg")) "新增语义令牌齐全"
 
+$month = Get-Content (Join-Path $src "MonthView.cs") -Raw -Encoding UTF8
+Check ($theme.Contains("SelectionBorder") -and $theme.Contains("SelectionFill")) "选中格描边 / 格底为显式令牌（SelectionBorder / SelectionFill）"
+Check ($month.Contains("Theme.SelectionBorder, Theme.SelectionBorderWidth")) "月视图选中格描边改用强调色令牌 + 2px"
+Check ($month.Contains("inMonth && !isSel")) "选中格不叠加悬停底色（无悬停 + 选中第三态）"
+Check (-not $month.Contains("Mix(Theme.Accent, Theme.Surface, 0.35f)")) "月视图不再使用低对比度描边 Mix(Accent, Surface, 0.35)"
+
 Section "5. 版本号一致性（AssemblyVersion 与 installer.iss）"
 $asmInfo = Get-Content (Join-Path $src "AssemblyInfo.cs") -Raw -Encoding UTF8
 $iss = Get-Content (Join-Path $root "installer.iss") -Raw -Encoding UTF8

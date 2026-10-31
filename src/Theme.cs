@@ -204,6 +204,19 @@ namespace QingLi
         public static Color AccentFillHover { get { return _current.AccentFillHover; } }
         public static Color AccentSoft { get { return _current.AccentSoft; } }
 
+        /// <summary>选中日期格描边宽度（px，不随缩放变化）：2px 抗锯齿渲染后仍与格底可辨。</summary>
+        public const float SelectionBorderWidth = 2f;
+
+        /// <summary>选中格底向强调色混色的比例。刻意保持很低：底色只做辅助区分，选中状态由描边承担，
+        /// 混得再多会让格内文字（尤其 <see cref="TextMuted"/>）跌破 4.5:1。</summary>
+        public const float SelectionTint = 0.10f;
+
+        /// <summary>选中格描边：直接用强调色，保证与选中格底 ≥ 3:1（深 6.42 / 浅 4.67，名义值）。</summary>
+        public static Color SelectionBorder { get { return _current.Accent; } }
+
+        /// <summary>选中格底：卡片色向强调色混 <see cref="SelectionTint"/>（与卡片底 1.21 / 1.15，仅辅助）。</summary>
+        public static Color SelectionFill { get { return Mix(_current.Surface, _current.Accent, SelectionTint); } }
+
         public static Color Danger { get { return _current.Danger; } }
         public static Color DangerSoftBg { get { return _current.DangerSoftBg; } }
         public static Color DangerSoftHover { get { return _current.DangerSoftHover; } }
